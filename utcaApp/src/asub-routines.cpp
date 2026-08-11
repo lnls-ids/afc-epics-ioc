@@ -349,7 +349,11 @@ static long asub_ebpm_pos_calc(aSubRecord *prec)
 }
 
 /** This array subroutine is used to calculate PBPM position using readings from
- * BPM ADCs and calibrated Suppression Matrix and coefficients.
+ * PBPM ADCs and calibrated suppression matrix and coefficients.
+ *
+ * The suppression matrix is used as below:
+ *
+ *     SupMat * [ A, B, C, D ] = [ Δx, Σx, Δy, Σy ]
  *
  * This function expects as input:
  * - antennas A,B,C,D in fields A,B,C,D, respectively
@@ -359,13 +363,14 @@ static long asub_ebpm_pos_calc(aSubRecord *prec)
  * And will write its output to:
  * - X and Y in OUTA and OUTB respectively
  */
-using Eigen::Matrix4d;
-using Eigen::Vector4d;
+using Eigen::Matrix;
+using Eigen::Vector;
 
 static long asub_pbpm_pos_calc(aSubRecord *prec) {
     /* sanity checking: these input elements were provided */
     if (prec->nea < 1 || prec->neb < 1 || prec->nec < 1 || prec->ned < 1 ||
-        prec->nee != 1 || prec->nef != 1 || prec->neg != 1 || prec->neh != 1 || prec -> nei != 1)
+        prec->nee != 1 || prec->nef != 1 || prec->neg != 1 || prec->neh != 1 ||
+        prec->nei != 16)
         return 1;
     /* sanity checking: these have the same length */
     if (prec->neb != prec->nea || prec->nec != prec->nea || prec->ned != prec->nea)
@@ -389,25 +394,30 @@ static long asub_pbpm_pos_calc(aSubRecord *prec) {
     auto *c = (epicsInt32 *)prec->c;
     auto *d = (epicsInt32 *)prec->d;
 
+    auto *lin_matrix = (epicsFloat64 *)prec->i;
+
     const epicsUInt32 elements = prec->nea;
 
-    /* Suppression Matrix */
-    auto *i = (epicsFloat64 *)prec->i;
-    Eigen::Map<Matrix4d> supmat(i);
-    
-    Vector4d readings;
-    
     auto *x = (epicsFloat64 *)prec->vala;
     auto *y = (epicsFloat64 *)prec->valb;
-    
-    for (epicsUInt32 i = 0; i < elements; ++i) {
+
+    /* we use an Eigen::Map and Vector4f to avoid any allocations while running
+     * this function */
+    Eigen::Map<Matrix<epicsFloat64, 4, 4, Eigen::RowMajor>> suppression_matrix(lin_matrix);
+    Vector<epicsFloat64, 4> readings, result;
+
+    auto goff = [](auto raw, auto off, auto gain) {
+        return raw * gain + off;
+    };
+
+    for (epicsUInt32 i = 0; i < elements; i++) {
         readings << a[i], b[i], c[i], d[i];
         auto pos = supmat * readings;
         auto xVal = pos[0]/pos[1];
         auto yVal = pos[2]/pos[3];
 
-        x[i] = xVal * x_gain + x_off;
-        y[i] = yVal * y_gain + y_off;
+        x[i] = goff(raw_x, x_off, x_gain);
+        y[i] = goff(raw_y, y_off, y_gain);
     }
 
     return 0;

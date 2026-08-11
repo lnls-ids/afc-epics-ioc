@@ -97,13 +97,8 @@ class PBPMPosCalcSelfTest {
 
     /* inputs */
     epicsInt32 a, b, c, d;
-    epicsFloat64 i[16];
+    std::array<epicsFloat64, 16> lin_matrix;
     epicsFloat64 x_off, x_gain, y_off, y_gain;
-
-    epicsFloat64 matrix[16] = {1, -0.3717, -0.6202, 0.8319,
-                  1, 0.3717, 0.6202, 0.8319,
-                  1, 2.3014, -1.0285, -2.0026,
-                  1, 2.3014, 1.0285, 2.0026};
 
     /* outputs */
     epicsFloat64 x, y;
@@ -115,18 +110,27 @@ class PBPMPosCalcSelfTest {
         type_field = type;
     }
 
+    template<size_t N>
+    void set_array_field(std::array<epicsFloat64, N> &arr, auto type, auto &value_field, auto &size_field, auto &type_field)
+    {
+        value_field = arr.data();
+        size_field = N;
+        type_field = type;
+    }
+
     void initialize_record()
     {
         set_field(a, menuFtypeLONG, prec.a, prec.nea, prec.fta);
         set_field(b, menuFtypeLONG, prec.b, prec.neb, prec.ftb);
         set_field(c, menuFtypeLONG, prec.c, prec.nec, prec.ftc);
         set_field(d, menuFtypeLONG, prec.d, prec.ned, prec.ftd);
-
+        
         set_field(x_off, menuFtypeDOUBLE, prec.e, prec.nee, prec.fte);
         set_field(x_gain, menuFtypeDOUBLE, prec.f, prec.nef, prec.ftf);
         set_field(y_off, menuFtypeDOUBLE, prec.g, prec.neg, prec.ftg);
         set_field(y_gain, menuFtypeDOUBLE, prec.h, prec.neh, prec.fth);
-        set_field(i, menuFtypeDOUBLE, prec.i, prec.nei, prec.fti);
+        set_array_field(lin_matrix, menuFtypeDOUBLE, prec.i, prec.nei, prec.fti);
+
         set_field(x, menuFtypeDOUBLE, prec.vala, prec.nova, prec.ftva);
         set_field(y, menuFtypeDOUBLE, prec.valb, prec.novb, prec.ftvb);
     }
@@ -137,9 +141,12 @@ class PBPMPosCalcSelfTest {
         b = 90000;
         c = 45000;
         d = 180000;
+                
+        lin_matrix = {1, -0.3717, -0.6202, 0.8319,
+                  1, 0.3717, 0.6202, 0.8319,
+                  1, 2.3014, -1.0285, -2.0026,
+                  1, 2.3014, 1.0285, 2.0026};
         
-        for(int j = 0; j < 16; j++) i[j] = matrix[j];
-
         x_gain = 3006;
         x_off  = -1290;
         y_gain = 7087;
@@ -150,11 +157,11 @@ class PBPMPosCalcSelfTest {
     {
         testOk(asub_pbpm_pos_calc(&prec) == 0, "check_outputs asub_pbpm_pos_calc");
         auto compare_expected_results = [](auto value, auto expected, auto name) {
-            testOk(std::abs(value - expected) < .01, "PBPM PosCalc verification for %s", name);
+            testOk(std::abs(value - expected) < .01, "PBPM PosCalc verification for %s with value %.3f", name, value);
         };
 
-        compare_expected_results(x, -1241.0641, "X");
-        compare_expected_results(y, -3000.8976, "Y");
+        compare_expected_results(x, 915.945, "X");
+        compare_expected_results(y, 390.416, "Y");
     }
 
     public:
@@ -170,7 +177,7 @@ class PBPMPosCalcSelfTest {
 
 MAIN(asubRoutinesTest)
 {
-    testPlan(10);
+    testPlan(13);
 
     EBPMPosCalcSelfTest();
     PBPMPosCalcSelfTest();
